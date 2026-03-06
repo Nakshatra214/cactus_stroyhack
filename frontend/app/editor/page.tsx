@@ -29,7 +29,7 @@ export default function EditorPage() {
                 toast.success('Scene updated intelligently via AI!');
             }
         }
-    }, [updatedScene]);
+    }, [updatedScene, project, scenes, selectedSceneId, setScenes]);
 
     // Load project data
     useEffect(() => {
@@ -59,7 +59,16 @@ export default function EditorPage() {
 
     const selectedScene = scenes.find(s => s.id === selectedSceneId) || null;
 
-    async function handleRebuildVideo() {
+    function downloadFinalVideo(projectIdToDownload: number) {
+        const link = document.createElement('a');
+        link.href = getExportUrl(projectIdToDownload);
+        link.download = '';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    async function handleRebuildVideo(downloadAfterRebuild: boolean = false) {
         if (!project) return;
         setIsRebuilding(true);
         try {
@@ -70,6 +79,10 @@ export default function EditorPage() {
             // Refresh scenes to get latest URLs
             const scenesData = await getScenes(project.id);
             setScenes(scenesData.scenes);
+            if (downloadAfterRebuild && result.final_video) {
+                downloadFinalVideo(project.id);
+                toast.success('Download started');
+            }
         } catch (error) {
             toast.error('Failed to rebuild video', { id: 'rebuild' });
         } finally {
@@ -189,6 +202,9 @@ export default function EditorPage() {
                                                 const scenesData = await getScenes(project.id);
                                                 setScenes(scenesData.scenes);
                                             }
+                                        }}
+                                        onSaveRebuildDownload={async () => {
+                                            await handleRebuildVideo(true);
                                         }}
                                         editSceneSocket={editSceneSocket}
                                         statusMessage={statusMessage}

@@ -48,6 +48,22 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
         setCurrentTime(0);
     }
 
+    function getFallbackAnimationClass() {
+        const animation = (scene?.animation_type || '').toLowerCase();
+        const motion = (scene?.motion_direction || '').toLowerCase();
+
+        if (motion.includes('left') || animation.includes('pan_left') || animation.includes('pan left')) {
+            return 'scene-pan-left';
+        }
+        if (motion.includes('right') || animation.includes('pan_right') || animation.includes('pan right')) {
+            return 'scene-pan-right';
+        }
+        if (animation.includes('parallax')) {
+            return 'scene-parallax';
+        }
+        return 'scene-zoom';
+    }
+
     return (
         <div className="glass-card overflow-hidden">
             {/* Video / Image Preview */}
@@ -69,7 +85,7 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                         <img
                             src={scene.image_url!}
                             alt={scene.scene_title}
-                            className="w-full h-full object-contain"
+                            className={`w-full h-full object-contain ${getFallbackAnimationClass()}`}
                         />
 
                         {/* Play/Pause overlay */}

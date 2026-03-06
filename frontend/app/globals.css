@@ -115,3 +115,40 @@ body {
 .drag-handle:active {
   cursor: grabbing;
 }
+
+@keyframes sceneZoom {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.1); }
+}
+
+@keyframes scenePanLeft {
+  0% { transform: scale(1.05) translateX(0); }
+  100% { transform: scale(1.05) translateX(-4%); }
+}
+
+@keyframes scenePanRight {
+  0% { transform: scale(1.05) translateX(0); }
+  100% { transform: scale(1.05) translateX(4%); }
+}
+
+@keyframes sceneParallax {
+  0% { transform: scale(1.02) translateX(-1.5%); }
+  50% { transform: scale(1.08) translateX(1.5%); }
+  100% { transform: scale(1.02) translateX(-1.5%); }
+}
+
+.scene-zoom {
+  animation: sceneZoom 10s ease-in-out infinite alternate;
+}
+
+.scene-pan-left {
+  animation: scenePanLeft 8s ease-in-out infinite alternate;
+}
+
+.scene-pan-right {
+  animation: scenePanRight 8s ease-in-out infinite alternate;
+}
+
+.scene-parallax {
+  animation: sceneParallax 9s ease-in-out infinite;
+}

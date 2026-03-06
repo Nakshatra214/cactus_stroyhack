@@ -9,6 +9,7 @@ import { Scene } from '@/lib/store';
 interface SceneEditorProps {
     scene: Scene;
     onUpdate: () => Promise<void>;
+    onSaveRebuildDownload: () => Promise<void>;
     editSceneSocket?: (scene: Scene, instruction: string) => void;
     statusMessage?: string;
 }
@@ -25,7 +26,7 @@ function parseLayers(text: string): string[] {
         .filter(Boolean);
 }
 
-export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMessage }: SceneEditorProps) {
+export default function SceneEditor({ scene, onUpdate, onSaveRebuildDownload, editSceneSocket, statusMessage }: SceneEditorProps) {
     const [script, setScript] = useState(scene.script);
     const [visualPrompt, setVisualPrompt] = useState(scene.visual_prompt);
     const [visualDescription, setVisualDescription] = useState(scene.visual_description || '');
@@ -40,6 +41,7 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
     const [title, setTitle] = useState(scene.scene_title);
     const [isSaving, setIsSaving] = useState(false);
     const [isRegenerating, setIsRegenerating] = useState(false);
+    const [isCompleting, setIsCompleting] = useState(false);
     const [instruction, setInstruction] = useState('');
 
     useEffect(() => {
@@ -95,6 +97,18 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
             toast.error('Failed to regenerate', { id: 'regen' });
         } finally {
             setIsRegenerating(false);
+        }
+    }
+
+    async function handleSaveRebuildDownload() {
+        setIsCompleting(true);
+        try {
+            if (hasChanges) {
+                await handleSave();
+            }
+            await onSaveRebuildDownload();
+        } finally {
+            setIsCompleting(false);
         }
     }
 
@@ -322,6 +336,18 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
                     Scene
                 </button>
             </div>
+            <button
+                onClick={handleSaveRebuildDownload}
+                disabled={isCompleting || isSaving || isRegenerating}
+                className="w-full btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
+            >
+                {isCompleting ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                    'Finish Editing'
+                )}
+                {' & Download Video'}
+            </button>
         </div>
     );
 }
