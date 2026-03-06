@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://storyhack:storyhack@localhost:5432/storyhack"
+    # Database (SQLite for local dev, switch to PostgreSQL for production)
+    DATABASE_URL: str = "sqlite+aiosqlite:///./storyhack.db"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
