@@ -1,83 +1,70 @@
 """
-Scene Builder: Combines image + audio into a scene video clip using MoviePy.
-Falls back to image+audio preview if FFmpeg is not available.
+Scene Builder: Combines image + audio into an animated scene video clip using MoviePy.
 """
 import os
 import uuid
-import subprocess
 from config import settings
+from moviepy.editor import AudioFileClip
+from video.scene_animator import animate_scene
 
-
-def is_ffmpeg_available() -> bool:
-    """Check if FFmpeg is installed and accessible."""
-    try:
-        result = subprocess.run(
-            ["ffmpeg", "-version"],
-            capture_output=True,
-            timeout=5,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
-
-
-_FFMPEG_AVAILABLE = is_ffmpeg_available()
-
-
-def build_scene_video(image_path: str, audio_path: str,
-                      scene_index: int, project_id: int,
-                      duration: float = 5.0) -> str:
-    """Build a single scene video from an image and audio file.
-    If FFmpeg is not available, returns None and the frontend shows image+audio preview."""
-
-    if not _FFMPEG_AVAILABLE:
-        print(f"[SceneBuilder] FFmpeg not found — skipping video build for scene {scene_index}. "
-              f"Image and audio will be used for preview.")
+async def build_scene_video(image_path: str, audio_path: str,
+                       scene_index: int, project_id: int,
+                       duration: float = 6.0, animation_type: str = "zoom") -> str:
+    """Build a single scene video from an image and audio file using MoviePy."""
+    if not image_path:
         return ""
-
+        
     filename = f"clip_{project_id}_{scene_index}_{uuid.uuid4().hex[:8]}.mp4"
     filepath = os.path.join(settings.VIDEO_DIR, filename)
 
-    # Resolve storage paths (remove /storage/ prefix for local file access)
+    # Resolve storage paths
     image_local = _resolve_path(image_path)
-    audio_local = _resolve_path(audio_path)
+    audio_local = _resolve_path(audio_path) if audio_path else ""
+
+    if not os.path.exists(image_local):
+        print(f"[SceneBuilder] Image not found: {image_local}")
+        return ""
 
     try:
-        from moviepy.editor import ImageClip, AudioFileClip
+        animated_clip = await animate_scene(image_local, duration, animation_type=animation_type)
 
-        # Load audio to get duration
-        audio_clip = AudioFileClip(audio_local)
-        actual_duration = max(duration, audio_clip.duration)
+        if audio_local and os.path.exists(audio_local):
+            audio_clip = AudioFileClip(audio_local)
+            animated_clip = animated_clip.set_audio(audio_clip)
 
-        # Create video from image with audio
-        image_clip = (
-            ImageClip(image_local)
-            .set_duration(actual_duration)
-            .resize((1280, 720))
-            .set_fps(24)
-        )
-
-        video = image_clip.set_audio(audio_clip)
-        video.write_videofile(
+        # Write out
+        animated_clip.write_videofile(
             filepath,
             fps=24,
             codec="libx264",
             audio_codec="aac",
-            logger=None,
+            logger=None
         )
+        
+        # Cleanup memory handlers
+        animated_clip.close()
 
-        audio_clip.close()
-        image_clip.close()
-
-        return f"/storage/videos/{filename}"
-
-    except Exception as e:
-        print(f"[SceneBuilder] MoviePy error for scene {scene_index}: {e}")
+        if os.path.exists(filepath):
+            return f"/storage/videos/{filename}"
         return ""
 
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[SceneBuilder] Error for scene {scene_index}: {e}")
+        return ""
 
 def _resolve_path(url_path: str) -> str:
-    """Convert URL path to local filesystem path."""
-    if url_path.startswith("/storage/"):
-        return url_path[1:]  # Remove leading /
+    """Convert a URL path like /storage/media/foo.png to an absolute filesystem path."""
+    if url_path.startswith("/storage/media/"):
+        filename = url_path.replace("/storage/media/", "")
+        return os.path.join(settings.MEDIA_DIR, filename)
+    elif url_path.startswith("/storage/videos/"):
+        filename = url_path.replace("/storage/videos/", "")
+        return os.path.join(settings.VIDEO_DIR, filename)
+    elif url_path.startswith("/storage/"):
+        # Generic fallback
+        from config import PROJECT_ROOT
+        return os.path.join(PROJECT_ROOT, url_path[1:])
     return url_path
+

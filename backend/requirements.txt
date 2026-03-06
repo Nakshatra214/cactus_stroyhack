@@ -19,3 +19,6 @@ python-dotenv
 aiofiles
 Pillow
 numpy
+edge-tts
+gevent
+google-genai

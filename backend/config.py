@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Project root = directory containing this config.py
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
 
 class Settings(BaseSettings):
     # App
@@ -24,6 +27,9 @@ class Settings(BaseSettings):
     OPENAI_TTS_MODEL: str = "tts-1"
     OPENAI_TTS_VOICE: str = "alloy"
 
+    # Google Gemini
+    GEMINI_API_KEY: str = "AIzaSyB4IWRDZzDm0Ws4AVX46r9kACDPa5BIuMA"
+
     # Stability AI (Stable Diffusion)
     STABILITY_API_KEY: str = ""
     STABILITY_API_URL: str = "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image"
@@ -31,10 +37,10 @@ class Settings(BaseSettings):
     # ElevenLabs (optional)
     ELEVENLABS_API_KEY: str = ""
 
-    # Storage
-    UPLOAD_DIR: str = "storage/uploads"
-    MEDIA_DIR: str = "storage/media"
-    VIDEO_DIR: str = "storage/videos"
+    # Storage — ABSOLUTE paths so Celery workers resolve correctly
+    UPLOAD_DIR: str = os.path.join(PROJECT_ROOT, "storage", "uploads")
+    MEDIA_DIR: str = os.path.join(PROJECT_ROOT, "storage", "media")
+    VIDEO_DIR: str = os.path.join(PROJECT_ROOT, "storage", "videos")
 
     class Config:
         env_file = ".env"
@@ -46,3 +52,4 @@ settings = Settings()
 # Create storage directories
 for d in [settings.UPLOAD_DIR, settings.MEDIA_DIR, settings.VIDEO_DIR]:
     os.makedirs(d, exist_ok=True)
+

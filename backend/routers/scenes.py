@@ -148,6 +148,70 @@ async def edit_scene_endpoint(
     }
 
 
+class AgenticEditSceneRequest(BaseModel):
+    scene_id: int
+    user_instruction: str
+
+@router.post("/agentic_edit_scene")
+async def agentic_edit_scene_endpoint(
+    request: AgenticEditSceneRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Use AI to intelligently edit a scene based on a user instruction."""
+    scene = await get_scene(db, request.scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    # Construct the JSON representation of the current scene
+    current_scene_dict = {
+        "title": scene.scene_title,
+        "narration_script": scene.script,
+        "visual_prompt": scene.visual_prompt,
+        "voice_tone": scene.voice_tone,
+        "duration": scene.duration,
+    }
+
+    import json
+    from agents.edit_agent import agentic_edit_scene
+
+    # Call the LLM to get the updated JSON
+    updated_scene = await agentic_edit_scene(
+        current_scene_json=json.dumps(current_scene_dict),
+        user_instruction=request.user_instruction,
+    )
+
+    # Prepare updates mapping the returned JSON keys back to the DB columns
+    updates = {}
+    if "title" in updated_scene:
+        updates["scene_title"] = updated_scene["title"]
+    if "narration_script" in updated_scene:
+        updates["script"] = updated_scene["narration_script"]
+    if "visual_prompt" in updated_scene:
+        updates["visual_prompt"] = updated_scene["visual_prompt"]
+    if "voice_tone" in updated_scene:
+        updates["voice_tone"] = updated_scene["voice_tone"]
+    if "duration" in updated_scene:
+        try:
+            updates["duration"] = float(updated_scene["duration"])
+        except (ValueError, TypeError):
+            pass
+
+    updated_scene_db = await update_scene(db, request.scene_id, updates)
+    if not updated_scene_db:
+        raise HTTPException(status_code=500, detail="Failed to update scene after AI edit")
+
+    return {
+        "id": updated_scene_db.id,
+        "scene_title": updated_scene_db.scene_title,
+        "script": updated_scene_db.script,
+        "visual_prompt": updated_scene_db.visual_prompt,
+        "voice_tone": updated_scene_db.voice_tone,
+        "duration": updated_scene_db.duration,
+        "version": updated_scene_db.version,
+        "status": updated_scene_db.status,
+    }
+
+
 @router.post("/regenerate_scene")
 async def regenerate_scene_endpoint(
     request: RegenerateSceneRequest,

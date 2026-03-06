@@ -8,27 +8,48 @@ from typing import Optional
 from config import settings
 
 
-SCRIPT_SYSTEM_PROMPT = """You are an expert video script writer. Your task is to convert document content into a structured video script.
+SCRIPT_SYSTEM_PROMPT = """You are an expert educational video script writer.
+
+Your task is to convert structured content (research paper, lecture notes, or report) into a scene-based explainer video.
 
 Rules:
-1. Break the content into 3-8 logical scenes
-2. Each scene should be self-contained and flow naturally
-3. Write narration in a clear, engaging, conversational tone
-4. Create visual prompts that describe what should be shown on screen
-5. Include source references indicating which part of the original content each scene is based on
-6. Keep each scene narration between 30-100 words
+- Output must be structured for a video editor system.
+- Each scene should represent ONE clear idea.
+- Maximum scene duration: 5–7 seconds.
+- Avoid generic statements.
+- Ensure technical accuracy.
+- Maintain grounding in the source content.
 
-Output ONLY valid JSON in this exact format:
+For each scene generate:
+1. Scene title
+2. Narration script
+3. Visual prompt (for image/video generation)
+4. Source reference (which section generated this)
+5. Estimated duration (seconds)
+6. Voice tone
+7. Confidence score (0–1)
+
+Constraints:
+- 4–8 scenes maximum
+- Each narration: 1–2 sentences
+- Visual prompt must describe a clear visual concept
+
+Return ONLY JSON.
+
+Output format:
 {
-  "scenes": [
-    {
-      "title": "Scene title",
-      "narration": "The narration text for this scene",
-      "visual_prompt": "A detailed description of the visual to generate",
-      "source_reference": "Based on section/paragraph X of the original content",
-      "confidence": 0.9
-    }
-  ]
+ "scenes":[
+  {
+   "scene_id":1,
+   "title":"",
+   "narration_script":"",
+   "visual_prompt":"",
+   "voice_tone":"",
+   "duration":5,
+   "source_reference":"",
+   "confidence_score":0.95
+  }
+ ]
 }"""
 
 
@@ -93,11 +114,14 @@ def _generate_mock_script(content: str) -> dict:
 
         scene_num = len(scenes) + 1
         scenes.append({
+            "scene_id": scene_num,
             "title": f"Scene {scene_num}: Key Concepts",
-            "narration": chunk if len(chunk) > 20 else f"This section covers important concepts from the source material. {chunk}",
+            "narration_script": chunk if len(chunk) > 20 else f"This section covers important concepts from the source material. {chunk}",
             "visual_prompt": f"Professional educational illustration showing concepts related to: {chunk[:100]}. Clean modern design with infographics.",
+            "voice_tone": "neutral",
+            "duration": 6,
             "source_reference": f"Based on paragraph {i + 1} of the original content",
-            "confidence": round(0.75 + (scene_num * 0.03), 2),
+            "confidence_score": round(0.75 + (scene_num * 0.03), 2),
         })
 
         if len(scenes) >= 6:
@@ -105,11 +129,14 @@ def _generate_mock_script(content: str) -> dict:
 
     if not scenes:
         scenes = [{
+            "scene_id": 1,
             "title": "Introduction",
-            "narration": "Welcome to this video presentation covering the key topics from the uploaded content.",
+            "narration_script": "Welcome to this video presentation covering the key topics from the uploaded content.",
             "visual_prompt": "Modern title slide with abstract geometric background in blue and purple gradients",
+            "voice_tone": "professional",
+            "duration": 5,
             "source_reference": "Generated introduction",
-            "confidence": 0.95,
+            "confidence_score": 0.95,
         }]
 
     return {"scenes": scenes}

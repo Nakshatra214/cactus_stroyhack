@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
-import { getScenes, getProject, buildVideo, getExportUrl } from '@/lib/api';
+import { getScenes, getProject, buildVideo, getExportUrl, getExportAssetsUrl } from '@/lib/api';
 import VideoPreview from '@/components/editor/VideoPreview';
 import SceneTimeline from '@/components/editor/SceneTimeline';
 import SceneEditor from '@/components/editor/SceneEditor';
 import ExplainabilityPanel from '@/components/editor/ExplainabilityPanel';
 import VersionHistory from '@/components/editor/VersionHistory';
 import toast from 'react-hot-toast';
+import useSceneEditor from '@/hooks/useSceneEditor';
 
 export default function EditorPage() {
     const searchParams = useSearchParams();
@@ -17,6 +18,18 @@ export default function EditorPage() {
     const { project, setProject, scenes, setScenes, selectedSceneId, setSelectedSceneId, isLoading, setLoading } = useStore();
     const [activePanel, setActivePanel] = useState<'editor' | 'explain' | 'versions'>('editor');
     const [isRebuilding, setIsRebuilding] = useState(false);
+
+    // AI WebSockets Hook
+    const { editSceneSocket, updatedScene, statusMessage } = useSceneEditor();
+
+    useEffect(() => {
+        if (updatedScene && project) {
+            setScenes(scenes.map(s => s.id === updatedScene.id ? updatedScene : s));
+            if (updatedScene.id === selectedSceneId) {
+                toast.success('Scene updated intelligently via AI!');
+            }
+        }
+    }, [updatedScene]);
 
     // Load project data
     useEffect(() => {
@@ -108,17 +121,26 @@ export default function EditorPage() {
                         {isRebuilding ? (
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         ) : '🔄'}
-                        Rebuild Video
+                        Rebuild
                     </button>
                     {project.final_video_url && (
                         <a
                             href={getExportUrl(project.id)}
                             download
                             className="btn-primary flex items-center gap-2"
+                            title="Download MP4 Video"
                         >
-                            📥 Export MP4
+                            📥 MP4
                         </a>
                     )}
+                    <a
+                        href={getExportAssetsUrl(project.id)}
+                        download
+                        className="btn-primary bg-accent-purple/80 hover:bg-accent-purple text-white flex items-center gap-2"
+                        title="Download Images, Audio & Script as ZIP"
+                    >
+                        📦 Export Assets
+                    </a>
                 </div>
             </div>
 
@@ -146,8 +168,8 @@ export default function EditorPage() {
                                 id={tab.id}
                                 onClick={() => setActivePanel(tab.key as any)}
                                 className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${activePanel === tab.key
-                                        ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
-                                        : 'bg-dark-600 text-dark-200 border border-transparent'
+                                    ? 'bg-primary-600/20 text-primary-400 border border-primary-500/30'
+                                    : 'bg-dark-600 text-dark-200 border border-transparent'
                                     }`}
                             >
                                 {tab.label}
@@ -168,6 +190,8 @@ export default function EditorPage() {
                                                 setScenes(scenesData.scenes);
                                             }
                                         }}
+                                        editSceneSocket={editSceneSocket}
+                                        statusMessage={statusMessage}
                                     />
                                 )}
                                 {activePanel === 'explain' && (

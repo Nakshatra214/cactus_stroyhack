@@ -1,7 +1,10 @@
-"""
-Celery application configuration.
-"""
+import os
+import sys
 from celery import Celery
+
+# Add current directory to path for module resolution
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from config import settings
 
 celery_app = Celery(

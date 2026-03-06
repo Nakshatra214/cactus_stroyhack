@@ -5,7 +5,7 @@ import axios from 'axios';
 
 const api = axios.create({
     baseURL: '/api',
-    timeout: 120000, // 2 minutes for video generation
+    timeout: 600000, // 2 minutes for video generation
 });
 
 // Upload
@@ -76,6 +76,11 @@ export async function buildVideo(projectId: number) {
     return data;
 }
 
+export async function processVideoAsync(projectId: number) {
+    const { data } = await api.post('/process_video_async', { project_id: projectId });
+    return data;
+}
+
 export async function getProject(projectId: number) {
     const { data } = await api.get(`/project/${projectId}`);
     return data;
@@ -83,4 +88,8 @@ export async function getProject(projectId: number) {
 
 export function getExportUrl(projectId: number, format: string = 'mp4') {
     return `/api/export_video/${projectId}?format=${format}`;
+}
+
+export function getExportAssetsUrl(projectId: number) {
+    return `/api/export_assets/${projectId}`;
 }

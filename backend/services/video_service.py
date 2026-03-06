@@ -17,14 +17,18 @@ async def generate_all_visuals(db: AsyncSession, project_id: int) -> List[dict]:
     results = []
 
     for scene in scenes:
-        image_url = await generate_visual(
+        visual_data = await generate_visual(
             prompt=scene.visual_prompt or f"Illustration for: {scene.scene_title}",
             scene_index=scene.scene_index,
             project_id=project_id,
         )
-        scene.image_url = image_url
+        if isinstance(visual_data, dict):
+            scene.image_url = visual_data.get("image_url")
+        else:
+            scene.image_url = visual_data
+            
         scene.status = "visual_done"
-        results.append({"scene_id": scene.id, "image_url": image_url})
+        results.append({"scene_id": scene.id, "image_url": scene.image_url})
 
     await db.commit()
     return results
@@ -57,7 +61,7 @@ async def build_all_scene_videos(db: AsyncSession, project_id: int) -> List[dict
 
     for scene in scenes:
         if scene.image_url and scene.audio_url:
-            video_url = build_scene_video(
+            video_url = await build_scene_video(
                 image_path=scene.image_url,
                 audio_path=scene.audio_url,
                 scene_index=scene.scene_index,
@@ -101,12 +105,15 @@ async def regenerate_single_scene(db: AsyncSession, scene_id: int) -> dict:
         return {"error": "Scene not found"}
 
     # Regenerate visual
-    image_url = await generate_visual(
+    visual_data = await generate_visual(
         prompt=scene.visual_prompt or f"Illustration for: {scene.scene_title}",
         scene_index=scene.scene_index,
         project_id=scene.project_id,
     )
-    scene.image_url = image_url
+    if isinstance(visual_data, dict):
+        scene.image_url = visual_data.get("image_url")
+    else:
+        scene.image_url = visual_data
 
     # Regenerate voice
     audio_url = await generate_voice(
@@ -118,8 +125,8 @@ async def regenerate_single_scene(db: AsyncSession, scene_id: int) -> dict:
     scene.audio_url = audio_url
 
     # Rebuild scene video
-    video_url = build_scene_video(
-        image_path=image_url,
+    video_url = await build_scene_video(
+        image_path=scene.image_url,
         audio_path=audio_url,
         scene_index=scene.scene_index,
         project_id=scene.project_id,
@@ -133,7 +140,7 @@ async def regenerate_single_scene(db: AsyncSession, scene_id: int) -> dict:
 
     return {
         "scene_id": scene.id,
-        "image_url": image_url,
+        "image_url": scene.image_url,
         "audio_url": audio_url,
         "video_clip": video_url,
     }

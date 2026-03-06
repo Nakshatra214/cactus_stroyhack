@@ -8,9 +8,11 @@ import toast from 'react-hot-toast';
 interface SceneEditorProps {
     scene: Scene;
     onUpdate: () => Promise<void>;
+    editSceneSocket?: (scene: Scene, instruction: string) => void;
+    statusMessage?: string;
 }
 
-export default function SceneEditor({ scene, onUpdate }: SceneEditorProps) {
+export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMessage }: SceneEditorProps) {
     const [script, setScript] = useState(scene.script);
     const [visualPrompt, setVisualPrompt] = useState(scene.visual_prompt);
     const [voiceTone, setVoiceTone] = useState(scene.voice_tone);
@@ -18,6 +20,9 @@ export default function SceneEditor({ scene, onUpdate }: SceneEditorProps) {
     const [title, setTitle] = useState(scene.scene_title);
     const [isSaving, setIsSaving] = useState(false);
     const [isRegenerating, setIsRegenerating] = useState(false);
+
+    // Agentic Edit state
+    const [instruction, setInstruction] = useState('');
 
     // Sync state when scene changes
     const [prevSceneId, setPrevSceneId] = useState(scene.id);
@@ -28,6 +33,7 @@ export default function SceneEditor({ scene, onUpdate }: SceneEditorProps) {
         setVoiceTone(scene.voice_tone);
         setDuration(scene.duration);
         setTitle(scene.scene_title);
+        setInstruction('');
     }
 
     async function handleSave() {
@@ -63,6 +69,12 @@ export default function SceneEditor({ scene, onUpdate }: SceneEditorProps) {
         }
     }
 
+    const handleAgenticEdit = () => {
+        if (!instruction.trim() || !editSceneSocket) return;
+        editSceneSocket(scene, instruction);
+        setInstruction(''); // clear the box after submitting
+    };
+
     const hasChanges =
         script !== scene.script ||
         visualPrompt !== scene.visual_prompt ||
@@ -81,6 +93,31 @@ export default function SceneEditor({ scene, onUpdate }: SceneEditorProps) {
                         Unsaved changes
                     </span>
                 )}
+            </div>
+
+            {/* AI Real-time Edit Box */}
+            <div className="bg-primary-900/20 border border-primary-500/30 rounded-xl p-3">
+                <label className="text-xs text-primary-400 font-medium block mb-2 flex items-center gap-1">
+                    ✨ Agentic Scene Edit
+                    {statusMessage && <span className="ml-2 bg-primary-500/20 px-2 py-0.5 rounded-full text-[10px] animate-pulse">{statusMessage}</span>}
+                </label>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={instruction}
+                        onChange={(e) => setInstruction(e.target.value)}
+                        placeholder="e.g. 'Make the visual darker and tone dramatic'"
+                        className="flex-1 bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500 transition-colors"
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAgenticEdit(); }}
+                    />
+                    <button
+                        onClick={handleAgenticEdit}
+                        disabled={!instruction.trim() || !!statusMessage}
+                        className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap"
+                    >
+                        🪄 Regenerate
+                    </button>
+                </div>
             </div>
 
             {/* Title */}
