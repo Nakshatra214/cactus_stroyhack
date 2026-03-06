@@ -64,9 +64,9 @@ async def build_all_scene_videos(db: AsyncSession, project_id: int) -> List[dict
                 project_id=project_id,
                 duration=scene.duration,
             )
-            scene.video_clip = video_url
-            scene.status = "completed"
-            results.append({"scene_id": scene.id, "video_clip": video_url})
+            scene.video_clip = video_url if video_url else None
+            scene.status = "completed"  # Mark completed even without video — image+audio exist
+            results.append({"scene_id": scene.id, "video_clip": video_url or None})
 
     await db.commit()
     return results
@@ -75,9 +75,11 @@ async def build_all_scene_videos(db: AsyncSession, project_id: int) -> List[dict
 async def build_final_video(db: AsyncSession, project_id: int) -> str:
     """Merge all scene videos into the final video."""
     scenes = await get_scenes(db, project_id)
-    scene_clips = [s.video_clip for s in scenes if s.video_clip]
+    scene_clips = [s.video_clip for s in scenes if s.video_clip and s.video_clip.strip()]
 
-    final_url = merge_scenes(scene_clips, project_id)
+    final_url = ""
+    if scene_clips:
+        final_url = merge_scenes(scene_clips, project_id)
 
     # Update project
     from database.models import Project
@@ -85,7 +87,7 @@ async def build_final_video(db: AsyncSession, project_id: int) -> str:
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if project:
-        project.final_video_url = final_url
+        project.final_video_url = final_url if final_url else None
         project.status = "completed"
         await db.commit()
 

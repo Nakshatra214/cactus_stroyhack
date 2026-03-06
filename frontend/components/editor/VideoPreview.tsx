@@ -1,109 +1,60 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Scene } from '@/lib/store';
 
 interface VideoPreviewProps {
     videoUrl: string | null;
     scene: Scene | null;
     scenes?: Scene[];
-    onSceneChange?: (sceneId: number) => void;
 }
 
-export default function VideoPreview({ videoUrl, scene, scenes = [], onSceneChange }: VideoPreviewProps) {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const audioRef = useRef<HTMLAudioElement>(null);
+export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewProps) {
     const [videoError, setVideoError] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [slideshowIndex, setSlideshowIndex] = useState(0);
-    const [slideshowProgress, setSlideshowProgress] = useState(0);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const progressRef = useRef<NodeJS.Timeout | null>(null);
+    const [currentTime, setCurrentTime] = useState(0);
+    const audioRef = useRef<HTMLAudioElement>(null);
 
-    // Reset video error when URL changes
+    // Reset error state when video URL changes
     useEffect(() => {
         setVideoError(false);
-    }, [videoUrl]);
-
-    // Get all scenes with images for slideshow
-    const slideshowScenes = scenes.length > 0 ? scenes.filter(s => s.image_url) : (scene?.image_url ? [scene] : []);
-    const currentSlide = slideshowScenes[slideshowIndex] || scene;
-
-    // Slideshow playback
-    const stopSlideshow = useCallback(() => {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        if (progressRef.current) clearInterval(progressRef.current);
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-        }
         setIsPlaying(false);
-        setSlideshowProgress(0);
-    }, []);
+        setCurrentTime(0);
+    }, [videoUrl, scene?.id]);
 
-    const playSlideshow = useCallback(() => {
-        if (slideshowScenes.length === 0) return;
-        setIsPlaying(true);
-        setSlideshowIndex(0);
-        setSlideshowProgress(0);
-    }, [slideshowScenes.length]);
+    const hasValidVideo = videoUrl && videoUrl.trim() !== '' && !videoError;
+    const hasImagePreview = scene?.image_url && scene.image_url.trim() !== '';
+    const hasAudio = scene?.audio_url && scene.audio_url.trim() !== '';
 
-    // Advance slides when playing
-    useEffect(() => {
-        if (!isPlaying || slideshowScenes.length === 0) return;
-
-        const currentScene = slideshowScenes[slideshowIndex];
-        if (!currentScene) {
-            stopSlideshow();
-            return;
-        }
-
-        const duration = (currentScene.duration || 5) * 1000;
-
-        // Notify parent of scene change
-        if (onSceneChange) onSceneChange(currentScene.id);
-
-        // Play audio for this scene
-        if (audioRef.current && currentScene.audio_url) {
-            audioRef.current.src = currentScene.audio_url;
+    function togglePlayback() {
+        if (!audioRef.current) return;
+        if (isPlaying) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+        } else {
             audioRef.current.play().catch(() => { });
+            setIsPlaying(true);
         }
+    }
 
-        // Progress bar
-        const startTime = Date.now();
-        progressRef.current = setInterval(() => {
-            const elapsed = Date.now() - startTime;
-            setSlideshowProgress(Math.min(100, (elapsed / duration) * 100));
-        }, 50);
+    function handleAudioTimeUpdate() {
+        if (audioRef.current) {
+            setCurrentTime(audioRef.current.currentTime);
+        }
+    }
 
-        // Next slide timer
-        timerRef.current = setTimeout(() => {
-            if (progressRef.current) clearInterval(progressRef.current);
-            setSlideshowProgress(0);
-
-            if (slideshowIndex < slideshowScenes.length - 1) {
-                setSlideshowIndex(prev => prev + 1);
-            } else {
-                stopSlideshow();
-            }
-        }, duration);
-
-        return () => {
-            if (timerRef.current) clearTimeout(timerRef.current);
-            if (progressRef.current) clearInterval(progressRef.current);
-        };
-    }, [isPlaying, slideshowIndex, slideshowScenes, onSceneChange, stopSlideshow]);
-
-    // Determine if we should use slideshow mode
-    const useSlideshowMode = videoError || !videoUrl;
+    function handleAudioEnded() {
+        setIsPlaying(false);
+        setCurrentTime(0);
+    }
 
     return (
         <div className="glass-card overflow-hidden">
-            {/* Video / Slideshow Player */}
+            {/* Video / Image Preview */}
             <div className="aspect-video bg-dark-800 relative">
-                {!useSlideshowMode ? (
+                {hasValidVideo ? (
+                    /* Real video playback */
                     <video
-                        ref={videoRef}
                         key={videoUrl}
                         src={videoUrl}
                         controls
@@ -112,67 +63,97 @@ export default function VideoPreview({ videoUrl, scene, scenes = [], onSceneChan
                     >
                         Your browser does not support the video tag.
                     </video>
-                ) : currentSlide?.image_url ? (
-                    <div className="w-full h-full relative">
-                        {/* Scene Image */}
+                ) : hasImagePreview ? (
+                    /* Image + Audio preview fallback */
+                    <div className="w-full h-full relative group">
                         <img
-                            src={currentSlide.image_url}
-                            alt={currentSlide.scene_title}
-                            className="w-full h-full object-contain transition-opacity duration-500"
+                            src={scene.image_url!}
+                            alt={scene.scene_title}
+                            className="w-full h-full object-contain"
                         />
 
-                        {/* Overlay with scene info */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-5">
-                            <p className="text-white text-sm font-semibold mb-1">{currentSlide.scene_title}</p>
-                            <p className="text-dark-200 text-xs line-clamp-2">{currentSlide.script}</p>
-                        </div>
+                        {/* Play/Pause overlay */}
+                        <button
+                            onClick={togglePlayback}
+                            className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        >
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isPlaying
+                                    ? 'bg-white/20 backdrop-blur-sm'
+                                    : 'bg-primary-600/80 hover:bg-primary-500/90 shadow-lg shadow-primary-500/30'
+                                }`}>
+                                {isPlaying ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
+                                        <rect x="6" y="4" width="4" height="16" rx="1" />
+                                        <rect x="14" y="4" width="4" height="16" rx="1" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
+                                        <polygon points="8,4 20,12 8,20" />
+                                    </svg>
+                                )}
+                            </div>
+                        </button>
 
-                        {/* Play/Pause Controls */}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            {!isPlaying && (
-                                <button
-                                    onClick={playSlideshow}
-                                    className="w-16 h-16 rounded-full bg-primary-600/80 hover:bg-primary-500 flex items-center justify-center text-white text-2xl transition-all hover:scale-110 shadow-lg shadow-primary-500/30"
-                                >
-                                    ▶
-                                </button>
+                        {/* Audio element */}
+                        {hasAudio && (
+                            <audio
+                                ref={audioRef}
+                                src={scene.audio_url!}
+                                onTimeUpdate={handleAudioTimeUpdate}
+                                onEnded={handleAudioEnded}
+                                preload="auto"
+                            />
+                        )}
+
+                        {/* Bottom info overlay */}
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                            <p className="text-white text-sm font-medium">{scene.scene_title}</p>
+                            <p className="text-dark-200 text-xs mt-1 line-clamp-2">{scene.script}</p>
+
+                            {/* Audio progress bar */}
+                            {hasAudio && (
+                                <div className="mt-2 flex items-center gap-2">
+                                    <button
+                                        onClick={togglePlayback}
+                                        className="text-white hover:text-primary-400 transition-colors"
+                                    >
+                                        {isPlaying ? '⏸' : '▶'}
+                                    </button>
+                                    <div className="flex-1 bg-white/20 rounded-full h-1.5 overflow-hidden">
+                                        <div
+                                            className="h-full bg-primary-400 rounded-full transition-all duration-200"
+                                            style={{
+                                                width: audioRef.current?.duration
+                                                    ? `${(currentTime / audioRef.current.duration) * 100}%`
+                                                    : '0%'
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-[10px] text-dark-200 min-w-[40px] text-right">
+                                        {Math.floor(currentTime)}s / {scene.duration}s
+                                    </span>
+                                </div>
                             )}
                         </div>
 
-                        {isPlaying && (
-                            <button
-                                onClick={stopSlideshow}
-                                className="absolute top-3 right-3 w-8 h-8 rounded-lg bg-black/50 hover:bg-black/70 flex items-center justify-center text-white text-xs transition-all"
-                            >
-                                ⏸
-                            </button>
-                        )}
-
-                        {/* Slide counter */}
-                        {slideshowScenes.length > 1 && (
-                            <div className="absolute top-3 left-3 bg-black/60 text-white text-xs px-2.5 py-1 rounded-lg">
-                                {slideshowIndex + 1} / {slideshowScenes.length}
+                        {/* FFmpeg notice badge */}
+                        {videoError && (
+                            <div className="absolute top-3 left-3 bg-dark-800/80 backdrop-blur-sm text-xs text-dark-200 px-3 py-1.5 rounded-lg border border-dark-400">
+                                🎞️ Showing image + audio preview (install FFmpeg for full video)
                             </div>
                         )}
-
-                        {/* Progress bar */}
-                        {isPlaying && (
-                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
-                                <div
-                                    className="h-full bg-gradient-to-r from-primary-500 to-accent-cyan transition-all duration-100"
-                                    style={{ width: `${slideshowProgress}%` }}
-                                />
+                        {!videoUrl && (
+                            <div className="absolute top-3 left-3 bg-dark-800/80 backdrop-blur-sm text-xs text-dark-200 px-3 py-1.5 rounded-lg border border-dark-400">
+                                🎨 Image + Audio Preview
                             </div>
                         )}
-
-                        {/* Hidden audio element */}
-                        <audio ref={audioRef} preload="auto" />
                     </div>
                 ) : (
+                    /* No preview at all */
                     <div className="w-full h-full flex items-center justify-center">
                         <div className="text-center">
                             <div className="text-5xl mb-3 opacity-40">🎬</div>
-                            <p className="text-dark-300 text-sm">No video preview available</p>
+                            <p className="text-dark-300 text-sm">No preview available</p>
                             <p className="text-dark-400 text-xs mt-1">Generate visuals and build video to preview</p>
                         </div>
                     </div>
@@ -180,53 +161,28 @@ export default function VideoPreview({ videoUrl, scene, scenes = [], onSceneChan
             </div>
 
             {/* Scene Info Bar */}
-            {currentSlide && (
+            {scene && (
                 <div className="px-4 py-3 border-t border-white/5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <span className="bg-primary-600/20 text-primary-400 text-xs px-2 py-1 rounded-lg font-medium">
-                            Scene {currentSlide.scene_index + 1}
+                            Scene {scene.scene_index + 1}
                         </span>
                         <span className="text-sm text-white font-medium truncate max-w-[200px]">
-                            {currentSlide.scene_title}
+                            {scene.scene_title}
                         </span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-dark-200">
-                        <span>v{currentSlide.version}</span>
+                        <span>v{scene.version}</span>
                         <span>•</span>
-                        <span>{currentSlide.duration}s</span>
+                        <span>{scene.duration}s</span>
                         <span>•</span>
-                        {useSlideshowMode && (
-                            <>
-                                <span className="text-accent-cyan">Slideshow</span>
-                                <span>•</span>
-                            </>
-                        )}
-                        <span className={`${currentSlide.status === 'completed' ? 'text-accent-green' :
-                                currentSlide.status === 'generating' ? 'text-accent-orange animate-pulse' :
+                        <span className={`${scene.status === 'completed' ? 'text-accent-green' :
+                                scene.status === 'generating' ? 'text-accent-orange animate-pulse' :
                                     'text-dark-300'
                             }`}>
-                            {currentSlide.status}
+                            {scene.status}
                         </span>
                     </div>
-                </div>
-            )}
-
-            {/* Scene Navigation Dots (slideshow mode) */}
-            {useSlideshowMode && slideshowScenes.length > 1 && (
-                <div className="px-4 py-2 border-t border-white/5 flex items-center justify-center gap-2">
-                    {slideshowScenes.map((s, i) => (
-                        <button
-                            key={s.id}
-                            onClick={() => {
-                                setSlideshowIndex(i);
-                                if (onSceneChange) onSceneChange(s.id);
-                            }}
-                            className={`w-2 h-2 rounded-full transition-all ${i === slideshowIndex
-                                    ? 'bg-primary-500 w-4'
-                                    : 'bg-dark-400 hover:bg-dark-300'
-                                }`}
-                        />
-                    ))}
                 </div>
             )}
         </div>
