@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Scene } from '@/lib/store';
-import { editScene, regenerateScene } from '@/lib/api';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+
+import { editScene, regenerateScene } from '@/lib/api';
+import { Scene } from '@/lib/store';
 
 interface SceneEditorProps {
     scene: Scene;
@@ -12,29 +13,50 @@ interface SceneEditorProps {
     statusMessage?: string;
 }
 
+function toLayersText(layers: string[] | undefined): string {
+    if (!layers || !layers.length) return '';
+    return layers.join(', ');
+}
+
+function parseLayers(text: string): string[] {
+    return text
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
 export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMessage }: SceneEditorProps) {
     const [script, setScript] = useState(scene.script);
     const [visualPrompt, setVisualPrompt] = useState(scene.visual_prompt);
+    const [visualDescription, setVisualDescription] = useState(scene.visual_description || '');
+    const [cameraShot, setCameraShot] = useState(scene.camera_shot || 'medium shot');
+    const [animationType, setAnimationType] = useState(scene.animation_type || 'zoom');
+    const [motionDirection, setMotionDirection] = useState(scene.motion_direction || 'slow zoom in');
+    const [visualLayers, setVisualLayers] = useState(toLayersText(scene.visual_layers));
+    const [textOverlay, setTextOverlay] = useState(scene.text_overlay || '');
+    const [transition, setTransition] = useState(scene.transition || 'fade');
     const [voiceTone, setVoiceTone] = useState(scene.voice_tone);
     const [duration, setDuration] = useState(scene.duration);
     const [title, setTitle] = useState(scene.scene_title);
     const [isSaving, setIsSaving] = useState(false);
     const [isRegenerating, setIsRegenerating] = useState(false);
-
-    // Agentic Edit state
     const [instruction, setInstruction] = useState('');
 
-    // Sync state when scene changes
-    const [prevSceneId, setPrevSceneId] = useState(scene.id);
-    if (scene.id !== prevSceneId) {
-        setPrevSceneId(scene.id);
+    useEffect(() => {
         setScript(scene.script);
         setVisualPrompt(scene.visual_prompt);
+        setVisualDescription(scene.visual_description || '');
+        setCameraShot(scene.camera_shot || 'medium shot');
+        setAnimationType(scene.animation_type || 'zoom');
+        setMotionDirection(scene.motion_direction || 'slow zoom in');
+        setVisualLayers(toLayersText(scene.visual_layers));
+        setTextOverlay(scene.text_overlay || '');
+        setTransition(scene.transition || 'fade');
         setVoiceTone(scene.voice_tone);
         setDuration(scene.duration);
         setTitle(scene.scene_title);
         setInstruction('');
-    }
+    }, [scene]);
 
     async function handleSave() {
         setIsSaving(true);
@@ -42,11 +64,18 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
             await editScene(scene.id, {
                 script,
                 visual_prompt: visualPrompt,
+                visual_description: visualDescription,
+                camera_shot: cameraShot,
+                animation_type: animationType,
+                motion_direction: motionDirection,
+                visual_layers: parseLayers(visualLayers),
+                text_overlay: textOverlay,
+                transition,
                 voice_tone: voiceTone,
                 duration,
                 scene_title: title,
             });
-            toast.success('Scene updated (v' + (scene.version + 1) + ')');
+            toast.success(`Scene updated (v${scene.version + 1})`);
             await onUpdate();
         } catch (error) {
             toast.error('Failed to save scene');
@@ -69,15 +98,22 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
         }
     }
 
-    const handleAgenticEdit = () => {
+    function handleAgenticEdit() {
         if (!instruction.trim() || !editSceneSocket) return;
         editSceneSocket(scene, instruction);
-        setInstruction(''); // clear the box after submitting
-    };
+        setInstruction('');
+    }
 
     const hasChanges =
         script !== scene.script ||
         visualPrompt !== scene.visual_prompt ||
+        visualDescription !== (scene.visual_description || '') ||
+        cameraShot !== (scene.camera_shot || 'medium shot') ||
+        animationType !== (scene.animation_type || 'zoom') ||
+        motionDirection !== (scene.motion_direction || 'slow zoom in') ||
+        parseLayers(visualLayers).join('|') !== (scene.visual_layers || []).join('|') ||
+        textOverlay !== (scene.text_overlay || '') ||
+        transition !== (scene.transition || 'fade') ||
         voiceTone !== scene.voice_tone ||
         duration !== scene.duration ||
         title !== scene.scene_title;
@@ -85,9 +121,7 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                    ✏️ Scene {scene.scene_index + 1}
-                </h3>
+                <h3 className="font-semibold text-white">Scene {scene.scene_index + 1}</h3>
                 {hasChanges && (
                     <span className="text-[10px] bg-accent-orange/20 text-accent-orange px-2 py-0.5 rounded-full">
                         Unsaved changes
@@ -95,32 +129,36 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
                 )}
             </div>
 
-            {/* AI Real-time Edit Box */}
             <div className="bg-primary-900/20 border border-primary-500/30 rounded-xl p-3">
-                <label className="text-xs text-primary-400 font-medium block mb-2 flex items-center gap-1">
-                    ✨ Agentic Scene Edit
-                    {statusMessage && <span className="ml-2 bg-primary-500/20 px-2 py-0.5 rounded-full text-[10px] animate-pulse">{statusMessage}</span>}
+                <label className="text-xs text-primary-400 font-medium block mb-2">
+                    Agentic Scene Edit
+                    {statusMessage && (
+                        <span className="ml-2 bg-primary-500/20 px-2 py-0.5 rounded-full text-[10px] animate-pulse">
+                            {statusMessage}
+                        </span>
+                    )}
                 </label>
                 <div className="flex gap-2">
                     <input
                         type="text"
                         value={instruction}
                         onChange={(e) => setInstruction(e.target.value)}
-                        placeholder="e.g. 'Make the visual darker and tone dramatic'"
+                        placeholder="e.g. make this scene more data-focused"
                         className="flex-1 bg-dark-800 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500 transition-colors"
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleAgenticEdit(); }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAgenticEdit();
+                        }}
                     />
                     <button
                         onClick={handleAgenticEdit}
                         disabled={!instruction.trim() || !!statusMessage}
                         className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap"
                     >
-                        🪄 Regenerate
+                        Regenerate
                     </button>
                 </div>
             </div>
 
-            {/* Title */}
             <div>
                 <label className="text-xs text-dark-200 font-medium block mb-1">Title</label>
                 <input
@@ -131,18 +169,26 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
                 />
             </div>
 
-            {/* Script / Narration */}
             <div>
                 <label className="text-xs text-dark-200 font-medium block mb-1">Narration Script</label>
                 <textarea
                     value={script}
                     onChange={(e) => setScript(e.target.value)}
-                    rows={4}
+                    rows={3}
                     className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500 resize-none transition-colors"
                 />
             </div>
 
-            {/* Visual Prompt */}
+            <div>
+                <label className="text-xs text-dark-200 font-medium block mb-1">Visual Description</label>
+                <textarea
+                    value={visualDescription}
+                    onChange={(e) => setVisualDescription(e.target.value)}
+                    rows={2}
+                    className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500 resize-none transition-colors"
+                />
+            </div>
+
             <div>
                 <label className="text-xs text-dark-200 font-medium block mb-1">Visual Prompt</label>
                 <textarea
@@ -153,7 +199,74 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
                 />
             </div>
 
-            {/* Voice & Duration Row */}
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs text-dark-200 font-medium block mb-1">Camera Shot</label>
+                    <input
+                        type="text"
+                        value={cameraShot}
+                        onChange={(e) => setCameraShot(e.target.value)}
+                        className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs text-dark-200 font-medium block mb-1">Animation Type</label>
+                    <select
+                        value={animationType}
+                        onChange={(e) => setAnimationType(e.target.value)}
+                        className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                    >
+                        <option value="zoom">zoom</option>
+                        <option value="pan_left">pan_left</option>
+                        <option value="pan_right">pan_right</option>
+                        <option value="parallax">parallax</option>
+                        <option value="infographic animation">infographic animation</option>
+                        <option value="diagram drawing animation">diagram drawing animation</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs text-dark-200 font-medium block mb-1">Motion Direction</label>
+                    <input
+                        type="text"
+                        value={motionDirection}
+                        onChange={(e) => setMotionDirection(e.target.value)}
+                        className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs text-dark-200 font-medium block mb-1">Transition</label>
+                    <input
+                        type="text"
+                        value={transition}
+                        onChange={(e) => setTransition(e.target.value)}
+                        className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                    />
+                </div>
+            </div>
+
+            <div>
+                <label className="text-xs text-dark-200 font-medium block mb-1">Visual Layers (comma-separated)</label>
+                <input
+                    type="text"
+                    value={visualLayers}
+                    onChange={(e) => setVisualLayers(e.target.value)}
+                    className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                />
+            </div>
+
+            <div>
+                <label className="text-xs text-dark-200 font-medium block mb-1">Text Overlay</label>
+                <input
+                    type="text"
+                    value={textOverlay}
+                    onChange={(e) => setTextOverlay(e.target.value)}
+                    className="w-full bg-dark-700 border border-dark-400 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500"
+                />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
                 <div>
                     <label className="text-xs text-dark-200 font-medium block mb-1">Voice Tone</label>
@@ -183,7 +296,6 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
                 </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex gap-2 pt-2">
                 <button
                     onClick={handleSave}
@@ -192,8 +304,10 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
                 >
                     {isSaving ? (
                         <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : '💾'}
-                    Save Changes
+                    ) : (
+                        'Save'
+                    )}
+                    Changes
                 </button>
                 <button
                     onClick={handleRegenerate}
@@ -202,8 +316,10 @@ export default function SceneEditor({ scene, onUpdate, editSceneSocket, statusMe
                 >
                     {isRegenerating ? (
                         <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : '🔄'}
-                    Regenerate
+                    ) : (
+                        'Rebuild'
+                    )}
+                    Scene
                 </button>
             </div>
         </div>

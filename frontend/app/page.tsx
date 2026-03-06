@@ -69,7 +69,13 @@ export default function HomePage() {
             // Upload first (Synchronous but fast)
             const uploadResult = await uploadContent(file || undefined, textContent || undefined, title || undefined);
             const projectId = uploadResult.project_id;
-            setProject({ id: projectId, title: uploadResult.title });
+            setProject({
+                id: projectId,
+                title: uploadResult.title,
+                status: uploadResult.status || 'created',
+                final_video_url: null,
+                content_preview: uploadResult.content_preview || '',
+            });
 
             // Trigger background pipeline
             await processVideoAsync(projectId);

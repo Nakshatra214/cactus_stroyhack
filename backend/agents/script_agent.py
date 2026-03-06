@@ -1,42 +1,33 @@
 """
 Script Agent: Converts document content into structured video scenes.
-Uses OpenAI/LangChain to summarize, segment, and generate scene scripts.
+Improved version with smart chunking and important sentence extraction.
 """
+
 import json
 import re
-from typing import Optional
+from typing import List
 from config import settings
+from google import genai
+import asyncio
 
 
-SCRIPT_SYSTEM_PROMPT = """You are an expert educational video script writer.
+SCRIPT_SYSTEM_PROMPT = """
+You are an expert educational video script writer.
 
-Your task is to convert structured content (research paper, lecture notes, or report) into a scene-based explainer video.
+Convert the provided academic content into a scene-based explainer video.
 
 Rules:
-- Output must be structured for a video editor system.
-- Each scene should represent ONE clear idea.
-- Maximum scene duration: 5–7 seconds.
-- Avoid generic statements.
-- Ensure technical accuracy.
-- Maintain grounding in the source content.
-
-For each scene generate:
-1. Scene title
-2. Narration script
-3. Visual prompt (for image/video generation)
-4. Source reference (which section generated this)
-5. Estimated duration (seconds)
-6. Voice tone
-7. Confidence score (0–1)
+- Each scene explains ONE concept.
+- Narration must be concise (1–2 sentences).
+- Scenes must follow logical order.
+- Highlight the most important concepts.
 
 Constraints:
-- 4–8 scenes maximum
-- Each narration: 1–2 sentences
-- Visual prompt must describe a clear visual concept
+- Generate 4–8 scenes
+- Each scene duration 5–7 seconds
 
-Return ONLY JSON.
+Return ONLY JSON in this format:
 
-Output format:
 {
  "scenes":[
   {
@@ -45,98 +36,184 @@ Output format:
    "narration_script":"",
    "visual_prompt":"",
    "voice_tone":"",
-   "duration":5,
+   "duration":6,
    "source_reference":"",
-   "confidence_score":0.95
+   "confidence_score":0.9
   }
  ]
-}"""
+}
+"""
 
+
+# ----------------------------
+# TEXT PROCESSING FUNCTIONS
+# ----------------------------
+
+def split_into_chunks(text: str, chunk_size: int = 1000) -> List[str]:
+    """Split long document into manageable chunks."""
+    paragraphs = re.split(r"\n\s*\n", text)
+
+    chunks = []
+    current = ""
+
+    for para in paragraphs:
+        if len(current) + len(para) < chunk_size:
+            current += " " + para
+        else:
+            chunks.append(current.strip())
+            current = para
+
+    if current:
+        chunks.append(current.strip())
+
+    return chunks
+
+
+def extract_key_sentences(text: str) -> str:
+    """Extract important sentences using simple keyword heuristics."""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+
+    keywords = [
+        "important",
+        "significant",
+        "key",
+        "method",
+        "result",
+        "model",
+        "system",
+        "algorithm",
+        "approach",
+        "ai",
+        "machine learning",
+        "neural network",
+    ]
+
+    scored = []
+
+    for s in sentences:
+        score = sum(k in s.lower() for k in keywords)
+        scored.append((score, s))
+
+    scored.sort(reverse=True)
+
+    best = [s for _, s in scored[:2]]
+
+    return " ".join(best) if best else sentences[0]
+
+
+# ----------------------------
+# MAIN SCRIPT GENERATOR
+# ----------------------------
 
 async def generate_script(content: str) -> dict:
-    """Generate a structured video script from document content."""
     if settings.OPENAI_API_KEY:
-        return await _generate_with_openai(content)
-    else:
-        return _generate_mock_script(content)
+        return await generate_script_with_llm(content)
+    elif settings.GEMINI_API_KEY:
+        return await generate_script_with_gemini(content)
+    return generate_mock_script(content)
+
+async def generate_script_with_gemini(content: str) -> dict:
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    chunks = split_into_chunks(content)
+    scenes = []
+    scene_id = 1
+
+    def call_gemini(chunk):
+        return client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[SCRIPT_SYSTEM_PROMPT, chunk],
+            config=genai.types.GenerateContentConfig(
+                temperature=0.3,
+                response_mime_type="application/json",
+            )
+        )
+
+    for chunk in chunks[:8]:
+        try:
+            response = await asyncio.to_thread(call_gemini, chunk)
+            raw = response.text.strip()
+            
+            match = re.search(r"\{[\s\S]*\}", raw)
+            if match:
+                parsed = json.loads(match.group())
+                for scene in parsed.get("scenes", []):
+                    scene["scene_id"] = scene_id
+                    scenes.append(scene)
+                    scene_id += 1
+        except Exception as e:
+            print(f"[ScriptAgent] Gemini generation failed: {e}")
+            pass
+
+    if not scenes:
+        return generate_mock_script(content)
+
+    return {"scenes": scenes}
 
 
-async def _generate_with_openai(content: str) -> dict:
-    """Use OpenAI to generate the script."""
+# ----------------------------
+# LLM VERSION
+# ----------------------------
+
+async def generate_script_with_llm(content: str) -> dict:
     from openai import AsyncOpenAI
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    # Truncate content if too long
-    max_chars = 12000
-    truncated = content[:max_chars] if len(content) > max_chars else content
+    chunks = split_into_chunks(content)
 
-    response = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": SCRIPT_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Convert this content into a video script:\n\n{truncated}"},
-        ],
-        temperature=0.7,
-        max_tokens=3000,
-    )
-
-    raw = response.choices[0].message.content.strip()
-
-    # Extract JSON from response (handle markdown code blocks)
-    json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
-    if json_match:
-        raw = json_match.group(1).strip()
-
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return _generate_mock_script(content)
-
-
-def _generate_mock_script(content: str) -> dict:
-    """Generate a mock script when no API key is available."""
-    # Split content into paragraphs
-    paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
-    if not paragraphs:
-        paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
-    if not paragraphs:
-        paragraphs = [content[:500]]
-
-    # Create scenes from paragraphs (max 6 scenes)
     scenes = []
-    chunk_size = max(1, len(paragraphs) // 6)
+    scene_id = 1
 
-    for i in range(0, min(len(paragraphs), 6 * chunk_size), chunk_size):
-        chunk = ' '.join(paragraphs[i:i + chunk_size])
-        if len(chunk) > 300:
-            chunk = chunk[:300] + '...'
+    for chunk in chunks[:8]:
 
-        scene_num = len(scenes) + 1
+        response = await client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": SCRIPT_SYSTEM_PROMPT},
+                {"role": "user", "content": chunk},
+            ],
+            temperature=0.3,
+            max_tokens=800,
+        )
+
+        raw = response.choices[0].message.content.strip()
+
+        match = re.search(r"\{[\s\S]*\}", raw)
+
+        if match:
+            try:
+                parsed = json.loads(match.group())
+                for scene in parsed.get("scenes", []):
+                    scene["scene_id"] = scene_id
+                    scenes.append(scene)
+                    scene_id += 1
+            except:
+                pass
+
+    return {"scenes": scenes[:8]}
+
+
+# ----------------------------
+# MOCK VERSION (No API)
+# ----------------------------
+
+def generate_mock_script(content: str) -> dict:
+    chunks = split_into_chunks(content)
+
+    scenes = []
+
+    for i, chunk in enumerate(chunks[:6]):
+        key_sentence = extract_key_sentences(chunk)
+
         scenes.append({
-            "scene_id": scene_num,
-            "title": f"Scene {scene_num}: Key Concepts",
-            "narration_script": chunk if len(chunk) > 20 else f"This section covers important concepts from the source material. {chunk}",
-            "visual_prompt": f"Professional educational illustration showing concepts related to: {chunk[:100]}. Clean modern design with infographics.",
-            "voice_tone": "neutral",
+            "scene_id": i + 1,
+            "title": f"Scene {i+1}: Key Concept",
+            "narration_script": key_sentence,
+            "visual_prompt": f"Educational illustration explaining: {key_sentence}",
+            "voice_tone": "educational",
             "duration": 6,
-            "source_reference": f"Based on paragraph {i + 1} of the original content",
-            "confidence_score": round(0.75 + (scene_num * 0.03), 2),
+            "source_reference": f"Section derived from chunk {i+1}",
+            "confidence_score": 0.85
         })
-
-        if len(scenes) >= 6:
-            break
-
-    if not scenes:
-        scenes = [{
-            "scene_id": 1,
-            "title": "Introduction",
-            "narration_script": "Welcome to this video presentation covering the key topics from the uploaded content.",
-            "visual_prompt": "Modern title slide with abstract geometric background in blue and purple gradients",
-            "voice_tone": "professional",
-            "duration": 5,
-            "source_reference": "Generated introduction",
-            "confidence_score": 0.95,
-        }]
 
     return {"scenes": scenes}

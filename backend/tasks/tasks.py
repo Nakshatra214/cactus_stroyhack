@@ -12,8 +12,8 @@ def task_full_pipeline(self, project_id: int):
     from database.db import async_session
     from database.models import Project
     from sqlalchemy import select
-    from services.script_service import generate_video_script
     from services.scene_service import create_scenes_from_script
+    from services.planning_service import generate_video_plan_data, refine_scenes_with_storyboard
     from services.video_service import (
         generate_all_visuals,
         generate_all_voices,
@@ -37,33 +37,38 @@ def task_full_pipeline(self, project_id: int):
                 project.status = "processing"
                 await db.commit()
                 
-                print(f"[Pipeline] Generating script for project {project_id}")
-                script_data = await generate_video_script(project.original_content)
+                print(f"[Pipeline] Generating video plan for project {project_id}")
+                plan_data = await generate_video_plan_data(
+                    content=project.original_content or "",
+                    title=project.title or "Research Explainer",
+                )
                 
                 # Debug log
-                with open("last_script_debug.json", "w") as f:
+                with open("last_video_plan_debug.json", "w", encoding="utf-8") as f:
                     import json
-                    json.dump(script_data, f)
+                    json.dump(plan_data, f, ensure_ascii=False, indent=2)
                 
-                # 4. Create Scenes
+                # 3. Create scenes from plan
                 print(f"[Pipeline] Creating scenes for project {project_id}")
-                await create_scenes_from_script(db, project_id, script_data)
+                await create_scenes_from_script(db, project_id, plan_data)
+
+                # 4. Optional storyboard refinement
+                print(f"[Pipeline] Refining storyboard for project {project_id}")
+                await refine_scenes_with_storyboard(db, project_id)
                 
-                # 4. Status: Generating Visuals
-                project.status = "visual_done" # We'll reuse these statuses for polling
-                await db.commit()
+                # 5. Generate visuals
                 print(f"[Pipeline] Generating visuals for project {project_id}")
                 await generate_all_visuals(db, project_id)
-                
-                # 5. Status: Generating Voice
-                project.status = "voice_done"
+                project.status = "visual_done"
                 await db.commit()
+                
+                # 6. Generate voice
                 print(f"[Pipeline] Generating voices for project {project_id}")
                 await generate_all_voices(db, project_id)
-                
-                # 6. Status: Building Video
-                project.status = "building"
+                project.status = "voice_done"
                 await db.commit()
+                
+                # 7. Build and merge video
                 print(f"[Pipeline] Building final video for project {project_id}")
                 await build_all_scene_videos(db, project_id)
                 final_url = await build_final_video(db, project_id)

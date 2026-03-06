@@ -127,6 +127,7 @@ The system works **without API keys** using mock/placeholder data. Add keys for 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/upload_content` | Upload PDF/DOCX/text |
+| POST | `/api/generate_video_plan` | Generate strict storyboard + animation JSON plan |
 | POST | `/api/generate_script` | Generate video script |
 | POST | `/api/generate_scenes` | Create scene records |
 | POST | `/api/generate_visuals` | Generate scene images |

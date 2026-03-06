@@ -8,7 +8,6 @@ from agents.voice_agent import generate_voice
 from video.scene_builder import build_scene_video
 from video.video_merger import merge_scenes
 from services.scene_service import get_scenes, get_scene
-from database.models import Scene
 
 
 async def generate_all_visuals(db: AsyncSession, project_id: int) -> List[dict]:
@@ -24,6 +23,10 @@ async def generate_all_visuals(db: AsyncSession, project_id: int) -> List[dict]:
         )
         if isinstance(visual_data, dict):
             scene.image_url = visual_data.get("image_url")
+            if not scene.animation_type and visual_data.get("animation_type"):
+                scene.animation_type = visual_data.get("animation_type")
+            if not scene.motion_direction and visual_data.get("motion_direction"):
+                scene.motion_direction = visual_data.get("motion_direction")
         else:
             scene.image_url = visual_data
             
@@ -67,6 +70,8 @@ async def build_all_scene_videos(db: AsyncSession, project_id: int) -> List[dict
                 scene_index=scene.scene_index,
                 project_id=project_id,
                 duration=scene.duration,
+                animation_type=scene.animation_type or "zoom",
+                motion_direction=scene.motion_direction or "",
             )
             scene.video_clip = video_url if video_url else None
             scene.status = "completed"  # Mark completed even without video — image+audio exist
@@ -131,6 +136,8 @@ async def regenerate_single_scene(db: AsyncSession, scene_id: int) -> dict:
         scene_index=scene.scene_index,
         project_id=scene.project_id,
         duration=scene.duration,
+        animation_type=scene.animation_type or "zoom",
+        motion_direction=scene.motion_direction or "",
     )
     scene.video_clip = video_url
     scene.status = "completed"

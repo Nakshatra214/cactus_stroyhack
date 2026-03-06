@@ -9,7 +9,8 @@ from video.scene_animator import animate_scene
 
 async def build_scene_video(image_path: str, audio_path: str,
                        scene_index: int, project_id: int,
-                       duration: float = 6.0, animation_type: str = "zoom") -> str:
+                       duration: float = 6.0, animation_type: str = "zoom",
+                       motion_direction: str = "") -> str:
     """Build a single scene video from an image and audio file using MoviePy."""
     if not image_path:
         return ""
@@ -26,7 +27,12 @@ async def build_scene_video(image_path: str, audio_path: str,
         return ""
 
     try:
-        animated_clip = await animate_scene(image_local, duration, animation_type=animation_type)
+        animated_clip = await animate_scene(
+            image_local,
+            duration,
+            animation_type=animation_type,
+            motion_direction=motion_direction,
+        )
 
         if audio_local and os.path.exists(audio_local):
             audio_clip = AudioFileClip(audio_local)

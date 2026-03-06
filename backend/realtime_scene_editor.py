@@ -1,7 +1,7 @@
 import json
 from fastapi import WebSocket
 from agents.edit_agent import agentic_edit_scene
-from services.scene_service import get_scene, update_scene
+from services.scene_service import get_scene, scene_to_dict, update_scene
 from services.video_service import regenerate_single_scene
 from database.db import async_session
 
@@ -48,7 +48,14 @@ async def handle_scene_edit(websocket: WebSocket, data: dict):
         current_scene_dict = {
             "title": scene.scene_title,
             "narration_script": scene.script,
+            "visual_description": scene.visual_description,
             "visual_prompt": scene.visual_prompt,
+            "camera_shot": scene.camera_shot,
+            "animation_type": scene.animation_type,
+            "motion_direction": scene.motion_direction,
+            "visual_layers": scene_to_dict(scene).get("visual_layers", []),
+            "text_overlay": scene.text_overlay,
+            "transition": scene.transition,
             "voice_tone": scene.voice_tone,
             "duration": scene.duration,
         }
@@ -62,6 +69,13 @@ async def handle_scene_edit(websocket: WebSocket, data: dict):
         if "title" in updated_json: updates["scene_title"] = updated_json["title"]
         if "narration_script" in updated_json: updates["script"] = updated_json["narration_script"]
         if "visual_prompt" in updated_json: updates["visual_prompt"] = updated_json["visual_prompt"]
+        if "visual_description" in updated_json: updates["visual_description"] = updated_json["visual_description"]
+        if "camera_shot" in updated_json: updates["camera_shot"] = updated_json["camera_shot"]
+        if "animation_type" in updated_json: updates["animation_type"] = updated_json["animation_type"]
+        if "motion_direction" in updated_json: updates["motion_direction"] = updated_json["motion_direction"]
+        if "visual_layers" in updated_json: updates["visual_layers"] = updated_json["visual_layers"]
+        if "text_overlay" in updated_json: updates["text_overlay"] = updated_json["text_overlay"]
+        if "transition" in updated_json: updates["transition"] = updated_json["transition"]
         if "voice_tone" in updated_json: updates["voice_tone"] = updated_json["voice_tone"]
         if "duration" in updated_json:
             try:
@@ -82,23 +96,7 @@ async def handle_scene_edit(websocket: WebSocket, data: dict):
 
         # Get the thoroughly regenerated scene
         final_scene = await get_scene(db, scene_id)
-        
-        scene_dict = {
-            "id": final_scene.id,
-            "scene_index": final_scene.scene_index,
-            "scene_title": final_scene.scene_title,
-            "script": final_scene.script,
-            "visual_prompt": final_scene.visual_prompt,
-            "image_url": final_scene.image_url,
-            "audio_url": final_scene.audio_url,
-            "video_clip": final_scene.video_clip,
-            "source_reference": final_scene.source_reference,
-            "confidence_score": final_scene.confidence_score,
-            "version": final_scene.version,
-            "duration": final_scene.duration,
-            "voice_tone": final_scene.voice_tone,
-            "status": final_scene.status,
-        }
+        scene_dict = scene_to_dict(final_scene)
 
         await manager.send(websocket, {
             "type": "scene_updated",

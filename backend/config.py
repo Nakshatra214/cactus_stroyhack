@@ -1,4 +1,5 @@
 import os
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -41,6 +42,17 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = os.path.join(PROJECT_ROOT, "storage", "uploads")
     MEDIA_DIR: str = os.path.join(PROJECT_ROOT, "storage", "media")
     VIDEO_DIR: str = os.path.join(PROJECT_ROOT, "storage", "videos")
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug_env(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "debug"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release", "prod", "production"}:
+                return False
+        return value
 
     class Config:
         env_file = ".env"

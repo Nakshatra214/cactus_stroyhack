@@ -9,6 +9,13 @@ export interface Scene {
     scene_title: string;
     script: string;
     visual_prompt: string;
+    visual_description: string;
+    camera_shot: string;
+    animation_type: string;
+    motion_direction: string;
+    visual_layers: string[];
+    text_overlay: string;
+    transition: string;
     image_url: string | null;
     audio_url: string | null;
     video_clip: string | null;

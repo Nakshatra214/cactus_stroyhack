@@ -4,14 +4,21 @@ echo  StoryHack: Starting Development Servers
 echo ============================================
 
 :: Start backend
-echo [1/2] Starting FastAPI backend...
+echo [1/3] Starting FastAPI backend...
 start "StoryHack Backend" cmd /k "cd backend && call venv\Scripts\activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000"
 
+:: Wait a bit
+timeout /t 2 /nobreak >nul
+
+:: Start Celery
+echo [2/3] Starting Celery worker...
+start "StoryHack Celery" cmd /k "cd backend && call venv\Scripts\activate && celery -A tasks.celery_app worker --loglevel=info -P gevent"
+
 :: Wait for backend
-timeout /t 3 /nobreak >nul
+timeout /t 2 /nobreak >nul
 
 :: Start frontend
-echo [2/2] Starting Next.js frontend...
+echo [3/3] Starting Next.js frontend...
 start "StoryHack Frontend" cmd /k "cd frontend && npm run dev"
 
 echo ============================================

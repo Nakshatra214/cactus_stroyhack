@@ -24,6 +24,11 @@ export async function generateScript(projectId: number) {
     return data;
 }
 
+export async function generateVideoPlan(projectId: number) {
+    const { data } = await api.post('/generate_video_plan', { project_id: projectId });
+    return data;
+}
+
 // Scenes
 export async function generateScenes(projectId: number, script: any) {
     const { data } = await api.post('/generate_scenes', { project_id: projectId, script });

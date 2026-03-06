@@ -3,6 +3,7 @@ Storyboard Agent: Converts generated scenes into detailed visual storyboard fram
 """
 import json
 import re
+import asyncio
 from config import settings
 
 
@@ -13,7 +14,9 @@ Given a set of scenes, generate a storyboard describing how each scene should vi
 Each scene must include:
 - camera shot type
 - visual composition
-- animation style
+- animation type
+- motion direction
+- visual layers
 - text overlays
 - transition
 
@@ -26,7 +29,9 @@ Output format:
    "scene_id":1,
    "visual_description":"",
    "camera_shot":"",
-   "animation_style":"",
+   "animation_type":"",
+   "motion_direction":"",
+   "visual_layers":[],
    "text_overlay":"",
    "transition":""
   }
@@ -44,7 +49,9 @@ async def generate_storyboard(scenes_json: str) -> dict:
                     "scene_id": s.get("scene_id", i + 1),
                     "visual_description": f"Mock visual for {s.get('title', 'scene')}",
                     "camera_shot": "Wide establishing shot",
-                    "animation_style": "Smooth medical infographic animation",
+                    "animation_type": "infographic animation",
+                    "motion_direction": "slow zoom in",
+                    "visual_layers": ["background", "diagram", "labels"],
                     "text_overlay": s.get("title", ""),
                     "transition": "Fade in",
                 }
@@ -57,15 +64,37 @@ async def generate_storyboard(scenes_json: str) -> dict:
 
     user_prompt = f"""Scenes:\n{scenes_json}"""
 
-    response = await client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": STORYBOARD_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.7,
-        max_tokens=1500,
-    )
+    try:
+        response = await asyncio.wait_for(
+            client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": STORYBOARD_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.7,
+                max_tokens=1500,
+            ),
+            timeout=35,
+        )
+    except Exception as e:
+        print(f"[StoryboardAgent] LLM generation failed: {e}")
+        scenes = json.loads(scenes_json).get("scenes", [])
+        return {
+            "storyboard": [
+                {
+                    "scene_id": s.get("scene_id", i + 1),
+                    "visual_description": f"Mock visual for {s.get('title', 'scene')}",
+                    "camera_shot": "Wide establishing shot",
+                    "animation_type": "infographic animation",
+                    "motion_direction": "slow zoom in",
+                    "visual_layers": ["background", "diagram", "labels"],
+                    "text_overlay": s.get("title", ""),
+                    "transition": "Fade in",
+                }
+                for i, s in enumerate(scenes)
+            ]
+        }
 
     raw = response.choices[0].message.content.strip()
 
