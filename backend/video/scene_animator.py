@@ -1,7 +1,7 @@
 import os
 import shutil
 
-# Setup FFmpeg for MoviePy BEFORE importing moviepy.editor
+# Setup FFmpeg for MoviePy BEFORE importing moviepy
 _system_ffmpeg = shutil.which("ffmpeg")
 if _system_ffmpeg:
     os.environ["IMAGEIO_FFMPEG_EXE"] = _system_ffmpeg
@@ -15,8 +15,8 @@ else:
         "ffmpeg.exe",
     )
 
-from moviepy.editor import CompositeVideoClip, ImageClip
-from moviepy.video.fx.all import resize
+from moviepy import CompositeVideoClip, ImageClip
+from moviepy.video.fx.Resize import Resize
 
 
 def _normalize_effect(animation_type: str, motion_direction: str) -> str:
@@ -48,22 +48,22 @@ def _normalize_effect(animation_type: str, motion_direction: str) -> str:
     return "zoom"
 
 
-async def animate_scene(
+def animate_scene(
     image_path: str,
     duration: float = 6.0,
     animation_type: str = "zoom",
     motion_direction: str = "",
 ):
     """Animate a static image into a video clip with deterministic pan/zoom effects."""
-    clip = ImageClip(image_path).set_duration(duration)
+    clip = ImageClip(image_path).with_duration(duration)
     effect = _normalize_effect(animation_type, motion_direction)
 
     if effect == "zoom":
-        clip = clip.fx(resize, lambda t: 1 + 0.08 * t)
-        clip = clip.set_position("center")
+        clip = clip.with_effects([Resize(lambda t: 1 + 0.08 * t)])
+        clip = clip.with_position("center")
     elif effect == "pan_left":
-        clip = clip.set_position(lambda t: (int(-50 * t), "center"))
+        clip = clip.with_position(lambda t: (int(-50 * t), "center"))
     elif effect == "pan_right":
-        clip = clip.set_position(lambda t: (int(50 * t), "center"))
+        clip = clip.with_position(lambda t: (int(50 * t), "center"))
 
     return CompositeVideoClip([clip], size=(1280, 720))

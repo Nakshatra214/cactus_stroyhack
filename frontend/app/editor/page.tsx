@@ -127,7 +127,9 @@ export default function EditorPage() {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={handleRebuildVideo}
+                        onClick={() => {
+                            void handleRebuildVideo();
+                        }}
                         disabled={isRebuilding}
                         className="btn-secondary flex items-center gap-2"
                     >

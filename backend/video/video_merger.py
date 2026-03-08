@@ -5,7 +5,7 @@ import os
 import uuid
 from typing import List
 from config import settings
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy import VideoFileClip, concatenate_videoclips
 
 def merge_scenes(scene_clips: List[str], project_id: int) -> str:
     """Merge multiple scene video clips into a single final video using MoviePy concat."""

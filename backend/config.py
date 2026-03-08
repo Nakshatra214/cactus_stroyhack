@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     OPENAI_TTS_VOICE: str = "alloy"
 
     # Google Gemini
-    GEMINI_API_KEY: str = "AIzaSyB4IWRDZzDm0Ws4AVX46r9kACDPa5BIuMA"
+    GEMINI_API_KEY: str = "AIzaSyB88tw5b-p2rS9tTnhjG-q-MrrBRIwSM6g"
 
     # Stability AI (Stable Diffusion)
     STABILITY_API_KEY: str = ""

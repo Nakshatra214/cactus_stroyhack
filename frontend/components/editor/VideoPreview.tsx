@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+
 import { Scene } from '@/lib/store';
 
 interface VideoPreviewProps {
@@ -9,18 +10,36 @@ interface VideoPreviewProps {
     scenes?: Scene[];
 }
 
-export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewProps) {
+export default function VideoPreview({ videoUrl, scene }: VideoPreviewProps) {
     const [videoError, setVideoError] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
+    const [currentWordIndex, setCurrentWordIndex] = useState(-1);
     const audioRef = useRef<HTMLAudioElement>(null);
 
-    // Reset error state when video URL changes
+    const narrationWords = useMemo(() => {
+        const text = scene?.script || '';
+        return text.split(/\s+/).map((word) => word.trim()).filter(Boolean);
+    }, [scene?.script]);
+
     useEffect(() => {
         setVideoError(false);
         setIsPlaying(false);
         setCurrentTime(0);
-    }, [videoUrl, scene?.id]);
+        setCurrentWordIndex(narrationWords.length ? 0 : -1);
+    }, [videoUrl, scene?.id, narrationWords.length]);
+
+    useEffect(() => {
+        if (!scene || narrationWords.length === 0) {
+            setCurrentWordIndex(-1);
+            return;
+        }
+
+        const totalDuration = Math.max(audioRef.current?.duration || scene.duration || 1, 0.1);
+        const progress = Math.min(Math.max(currentTime / totalDuration, 0), 0.9999);
+        const nextIndex = Math.min(narrationWords.length - 1, Math.floor(progress * narrationWords.length));
+        setCurrentWordIndex(nextIndex);
+    }, [currentTime, narrationWords, scene]);
 
     const hasValidVideo = videoUrl && videoUrl.trim() !== '' && !videoError;
     const hasImagePreview = scene?.image_url && scene.image_url.trim() !== '';
@@ -32,7 +51,7 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
             audioRef.current.pause();
             setIsPlaying(false);
         } else {
-            audioRef.current.play().catch(() => { });
+            audioRef.current.play().catch(() => {});
             setIsPlaying(true);
         }
     }
@@ -46,6 +65,7 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
     function handleAudioEnded() {
         setIsPlaying(false);
         setCurrentTime(0);
+        setCurrentWordIndex(narrationWords.length ? 0 : -1);
     }
 
     function getFallbackAnimationClass() {
@@ -64,12 +84,17 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
         return 'scene-zoom';
     }
 
+    function getWordClass(index: number) {
+        if (currentWordIndex < 0) return 'narration-word';
+        if (index < currentWordIndex) return 'narration-word narration-word-spoken';
+        if (index === currentWordIndex) return 'narration-word narration-word-current';
+        return 'narration-word';
+    }
+
     return (
         <div className="glass-card overflow-hidden">
-            {/* Video / Image Preview */}
             <div className="aspect-video bg-dark-800 relative">
                 {hasValidVideo ? (
-                    /* Real video playback */
                     <video
                         key={videoUrl}
                         src={videoUrl}
@@ -80,7 +105,6 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                         Your browser does not support the video tag.
                     </video>
                 ) : hasImagePreview ? (
-                    /* Image + Audio preview fallback */
                     <div className="w-full h-full relative group">
                         <img
                             src={scene.image_url!}
@@ -88,14 +112,13 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                             className={`w-full h-full object-contain ${getFallbackAnimationClass()}`}
                         />
 
-                        {/* Play/Pause overlay */}
                         <button
                             onClick={togglePlayback}
                             className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                         >
                             <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isPlaying
-                                    ? 'bg-white/20 backdrop-blur-sm'
-                                    : 'bg-primary-600/80 hover:bg-primary-500/90 shadow-lg shadow-primary-500/30'
+                                ? 'bg-white/20 backdrop-blur-sm'
+                                : 'bg-primary-600/80 hover:bg-primary-500/90 shadow-lg shadow-primary-500/30'
                                 }`}>
                                 {isPlaying ? (
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
@@ -110,7 +133,6 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                             </div>
                         </button>
 
-                        {/* Audio element */}
                         {hasAudio && (
                             <audio
                                 ref={audioRef}
@@ -121,19 +143,36 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                             />
                         )}
 
-                        {/* Bottom info overlay */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent p-4">
                             <p className="text-white text-sm font-medium">{scene.scene_title}</p>
-                            <p className="text-dark-200 text-xs mt-1 line-clamp-2">{scene.script}</p>
 
-                            {/* Audio progress bar */}
+                            <div className="mt-2 rounded-xl border border-white/10 bg-black/40 p-3">
+                                <div className="flex items-start gap-3">
+                                    <div className={`narrator-avatar ${isPlaying ? 'narrator-avatar-speaking' : ''}`}>
+                                        AI
+                                    </div>
+                                    <p className="text-xs leading-6 text-dark-100 flex-1">
+                                        {narrationWords.length ? (
+                                            narrationWords.map((word, index) => (
+                                                <span key={`${word}-${index}`} className={getWordClass(index)}>
+                                                    {word}
+                                                    {index < narrationWords.length - 1 ? ' ' : ''}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span className="text-dark-300">No narration script.</span>
+                                        )}
+                                    </p>
+                                </div>
+                            </div>
+
                             {hasAudio && (
                                 <div className="mt-2 flex items-center gap-2">
                                     <button
                                         onClick={togglePlayback}
                                         className="text-white hover:text-primary-400 transition-colors"
                                     >
-                                        {isPlaying ? '⏸' : '▶'}
+                                        {isPlaying ? 'Pause' : 'Play'}
                                     </button>
                                     <div className="flex-1 bg-white/20 rounded-full h-1.5 overflow-hidden">
                                         <div
@@ -145,30 +184,28 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                                             }}
                                         />
                                     </div>
-                                    <span className="text-[10px] text-dark-200 min-w-[40px] text-right">
+                                    <span className="text-[10px] text-dark-200 min-w-[56px] text-right">
                                         {Math.floor(currentTime)}s / {scene.duration}s
                                     </span>
                                 </div>
                             )}
                         </div>
 
-                        {/* FFmpeg notice badge */}
                         {videoError && (
                             <div className="absolute top-3 left-3 bg-dark-800/80 backdrop-blur-sm text-xs text-dark-200 px-3 py-1.5 rounded-lg border border-dark-400">
-                                🎞️ Showing image + audio preview (install FFmpeg for full video)
+                                Showing image + audio preview (full video unavailable)
                             </div>
                         )}
                         {!videoUrl && (
                             <div className="absolute top-3 left-3 bg-dark-800/80 backdrop-blur-sm text-xs text-dark-200 px-3 py-1.5 rounded-lg border border-dark-400">
-                                🎨 Image + Audio Preview
+                                Image + audio preview mode
                             </div>
                         )}
                     </div>
                 ) : (
-                    /* No preview at all */
                     <div className="w-full h-full flex items-center justify-center">
                         <div className="text-center">
-                            <div className="text-5xl mb-3 opacity-40">🎬</div>
+                            <div className="text-5xl mb-3 opacity-40">Video</div>
                             <p className="text-dark-300 text-sm">No preview available</p>
                             <p className="text-dark-400 text-xs mt-1">Generate visuals and build video to preview</p>
                         </div>
@@ -176,7 +213,6 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                 )}
             </div>
 
-            {/* Scene Info Bar */}
             {scene && (
                 <div className="px-4 py-3 border-t border-white/5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -189,12 +225,12 @@ export default function VideoPreview({ videoUrl, scene, scenes }: VideoPreviewPr
                     </div>
                     <div className="flex items-center gap-3 text-xs text-dark-200">
                         <span>v{scene.version}</span>
-                        <span>•</span>
+                        <span>-</span>
                         <span>{scene.duration}s</span>
-                        <span>•</span>
+                        <span>-</span>
                         <span className={`${scene.status === 'completed' ? 'text-accent-green' :
-                                scene.status === 'generating' ? 'text-accent-orange animate-pulse' :
-                                    'text-dark-300'
+                            scene.status === 'generating' ? 'text-accent-orange animate-pulse' :
+                                'text-dark-300'
                             }`}>
                             {scene.status}
                         </span>

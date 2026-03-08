@@ -224,6 +224,18 @@ async def update_scene(db: AsyncSession, scene_id: int, updates: dict) -> Option
     if "visual_layers" in updates:
         scene.visual_layers = _serialize_visual_layers(updates["visual_layers"])
 
+    update_fields = set(updates.keys())
+    narration_changed = bool(update_fields & {"script", "voice_tone", "duration"})
+    visuals_changed = bool(update_fields & {"visual_prompt", "visual_description"})
+    animation_changed = bool(update_fields & {"animation_type", "motion_direction", "transition", "text_overlay", "visual_layers"})
+
+    if visuals_changed:
+        scene.image_url = None
+    if narration_changed:
+        scene.audio_url = None
+    if visuals_changed or narration_changed or animation_changed:
+        scene.video_clip = None
+
     scene.version += 1
     scene.status = "pending"
 

@@ -3,6 +3,7 @@ Visual Agent: Generates images for each scene using Stability AI or creates plac
 """
 import os
 import uuid
+import asyncio
 import httpx
 from PIL import Image, ImageDraw, ImageFont
 from config import settings
@@ -12,7 +13,9 @@ from google import genai
 async def generate_visual(prompt: str, scene_index: int, project_id: int):
     """Generate a visual image for a scene. Returns the image metadata dict or URL."""
     if settings.GEMINI_API_KEY:
-        return _generate_with_gemini(prompt, scene_index, project_id)
+        # Gemini image generation is synchronous; run it in a worker thread
+        # so API polling endpoints remain responsive.
+        return await asyncio.to_thread(_generate_with_gemini, prompt, scene_index, project_id)
     elif settings.STABILITY_API_KEY:
         return await _generate_with_stability(prompt, scene_index, project_id)
     else:
